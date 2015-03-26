@@ -3,6 +3,7 @@ import math
 import csv
 import numpy as np
 import collections
+import bisect
 # planned sequence of events
 #1 read in data from file splitting out by hole id
 # make a dictionary of collars using holeid as key
@@ -193,11 +194,31 @@ def densifySurvey(data):
 #perhaps use the bisect function of the ordered dictionary
 #then try and make it so that if an exact match isnt found, a near enough value is found and coords are made from that
 #this is a precursor to being able to create attributed log style traces.
-def downholeLocator():
+
+#after creating the coords for top and bottom, need to now pull all existing coords in between
+#again bisect should do the trick to get the top and bottom range, then iterate through the keys
+#consider turning this into a class? to share variables internally
+def downholeLocator(drillholedata, downholelength):
 	#a function to retrieve XYZ coordinates of any given downhole depth
-
-
-
+	dhl = downholelength #the target downhole depth to find
+	dhdata = drillholedata #the survey dictionary for the target drillhole
+	
+	
+	keylist= dhdata.keys()
+	idx = bisect.bisect(keylist, dhl) -1 #search for the insertion point suitable for target depth, and give index of closests uphole entry	
+	upholenode =keylist[idx] #the dh depth of the closest node uphole of target
+	dholenode = keylist[idx+1]
+	extension = dhl-upholenode #the distance past the node to reach desired dh depth
+	uhncoord = dhdata[upholenode] #retrieve the XYZ coords of the uphole node
+	dhncoord = dhdata[dholenode]
+	alpha = math.atan((dhncoord[0]-uhncoord[0])/(dhncoord[2]-uhncoord[2])) #calculate the angle in the XZ plane
+	beta = math.atan((dhncoord[1]-uhncoord[1])/(dhncoord[2]-uhncoord[2])) #calculate angle in the YZ plane
+	#calculate the coords for the target dhl using the uphole node and the now known angles
+	Xdhl = uhncoord[0] - math.sin(alpha)* extension
+	Ydhl = uhncoord[1] - math.sin(beta) * extension
+	Zdhl = uhncoord[2] - math.cos(alpha) * exstension
+		
+	return [Xdhl, Ydhl, Zdhl]
 
 #the execution sequence
 #create empty containers
