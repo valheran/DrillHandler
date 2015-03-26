@@ -193,7 +193,8 @@ def densifySurvey(data):
 #perhaps use the bisect function of the ordered dictionary
 #then try and make it so that if an exact match isnt found, a near enough value is found and coords are made from that
 #this is a precursor to being able to create attributed log style traces.
-
+def downholeLocator():
+	#a function to retrieve XYZ coordinates of any given downhole depth
 
 
 
