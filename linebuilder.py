@@ -45,6 +45,7 @@ class traceMaker:
             #that didnt use downhole length as the key
             self.temp[sampto] = coords
             #print coords
+		#convert into an ordered dictionary (sequential downhole depth) to help with searchability
         self.results = collections.OrderedDict(sorted(self.temp.items()))
 
     def calc(self, sampfrom, sampto, dip, azi):
