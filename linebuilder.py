@@ -9,12 +9,14 @@ import bisect
 # make a dictionary of collars using holeid as key
 # for each hole make a survey dictionary. Perhaps this can actually done by making a dictionary using hole id as key
 #and a list of [collar, survey] as the items
+#2 make the trace coordinates by iterating the DrillholeCoordBuilder class over the drillhole dictionary, returning a
 #sequence of x,y,z co-ords for each hole
 #3 using these coords, create line segments in a shape file to represent the trace in plan view
 #Then need to figure out how to add log data as attributes- perhaps by breaking down the hole into more segments
 
 
 
+class DrillholeCoordBuilder:
 	#a class which calculates the XYZ coords for an entire drillhole
     #creates a series of x,y,z coordinates from an intial collar location and a series of downhole surveys
     #the resultiing ordered dictionary uses downhole length as its key, and a list of [X,Y,Z] coords as the item
@@ -122,6 +124,7 @@ def calcXYZ(drillholes):
         holedata = drillholes[holes]
         collar = holedata[0]
         survey =holedata[1]
+        trace = DrillholeCoordBuilder(collar, survey)
         drillholeXYZ[holes] = trace.results
     return drillholeXYZ
     
@@ -198,6 +201,7 @@ def densifySurvey(data):
  #make a function to lookup a drillhole  and pull a downhole coordinateMode
 
 
+class IntervalCoordBuilder:
 #a class which calculates the XYZ coords for a specified interval of a given drillhole
 #data parsed is the drillhole XYZ dictionary (ordered, keys=downhole depth) and the sart and end of the desired interval
 	def __init__(self, drillholedata, sampfrom, sampto):
