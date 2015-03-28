@@ -82,7 +82,7 @@ def geomBuilder(coordlist):
 def readFromFile():
     collars = []
     drillholes = {}
-    with open(r'H:\Scripting\collars.csv', 'r') as col:
+    with open(r'E:\GitHub\DrillHandler\collars.csv', 'r') as col:
         next(col)
         readercol=csv.reader(col)
             
@@ -92,7 +92,7 @@ def readFromFile():
             a = holeid
             i=0
                     
-            with open(r'H:\Scripting\surveys.csv', 'r') as sur:
+            with open(r'E:\GitHub\DrillHandler\surveys.csv', 'r') as sur:
                 next(sur)
                 readersur = csv.reader(sur)
                 surveys={}
@@ -204,71 +204,107 @@ def densifySurvey(data):
 class IntervalCoordBuilder:
 #a class which calculates the XYZ coords for a specified interval of a given drillhole
 #data parsed is the drillhole XYZ dictionary (ordered, keys=downhole depth) and the sart and end of the desired interval
-	def __init__(self, drillholedata, sampfrom, sampto):
-		
-		#initialise instance variables
-		self.dhdata = drillholedata #the survey dictionary for the target drillhole
-		self.keylist= dhdata.keys()
-		self.sampfrom = sampfrom
-		self.sampto = sampto
-		#initialise result container which will be used to build geometries
-		self.resdict= collections.OrderedDict()
-		#execute algorithm to create coords
-		self.createCoordList()
-		
-	def downholeLocator(self, downholelength):
-		#a function to retrieve XYZ coordinates of any given downhole depth
-		dhl = downholelength #the target downhole depth to find
-		
-		idx = bisect.bisect(keylist, dhl) -1 #search for the insertion point suitable for target depth, and give index of closests uphole entry	
-		upholenode = self.keylist[idx] #the dh depth of the closest node uphole of target
-		dholenode = self.keylist[idx+1]
-		extension = dhl-upholenode #the distance past the node to reach desired dh depth
-		uhncoord = dhdata[upholenode] #retrieve the XYZ coords of the uphole node
-		dhncoord = dhdata[dholenode]
-		alpha = math.atan((dhncoord[0]-uhncoord[0])/(dhncoord[2]-uhncoord[2])) #calculate the angle in the XZ plane
-		beta = math.atan((dhncoord[1]-uhncoord[1])/(dhncoord[2]-uhncoord[2])) #calculate angle in the YZ plane
-		#calculate the coords for the target dhl using the uphole node and the now known angles
-		Xdhl = uhncoord[0] - math.sin(alpha)* extension
-		Ydhl = uhncoord[1] - math.sin(beta) * extension
-		Zdhl = uhncoord[2] - math.cos(alpha) * exstension
-			
-		return [Xdhl, Ydhl, Zdhl]
+    def __init__(self, drillholedata, sampfrom, sampto):
+        #initialise instance variables
+        self.dhdata = drillholedata #the XYZ dictionary for the target drillhole
+        self.keylist= self.dhdata.keys()
+        print"keylist", self.keylist
+        self.sampfrom = sampfrom
+        self.sampto = sampto
+        #initialise result container which will be used to build geometries
+        self.intervalcoords= collections.OrderedDict()
+        #execute algorithm to create coords
+        self.createCoordList()
+    
+    def downholeLocator(self, downholelength):
+        #a function to retrieve XYZ coordinates of any given downhole depth
+        dhl = downholelength #the target downhole depth to find
+        print "DHL", dhl
+        idx = bisect.bisect(self.keylist, dhl) -1 #search for the insertion point suitable for target depth, and give index of closests uphole entry	
+        print "idx", idx
+        upholenode = self.keylist[idx] #the dh depth of the closest node uphole of target
+        print"upholenode", upholenode
+        dholenode = self.keylist[idx+1]
+        extension = dhl-upholenode #the distance past the node to reach desired dh depth
+        uhncoord = self.dhdata[upholenode] #retrieve the XYZ coords of the uphole node
+        dhncoord = self.dhdata[dholenode]
+        alpha = math.atan((dhncoord[0]-uhncoord[0])/(dhncoord[2]-uhncoord[2])) #calculate the angle in the XZ plane
+        beta = math.atan((dhncoord[1]-uhncoord[1])/(dhncoord[2]-uhncoord[2])) #calculate angle in the YZ plane
+        #calculate the coords for the target dhl using the uphole node and the now known angles
+        Xdhl = uhncoord[0] - math.sin(alpha)* extension
+        Ydhl = uhncoord[1] - math.sin(beta) * extension
+        Zdhl = uhncoord[2] - math.cos(alpha) * extension
+            
+        return [Xdhl, Ydhl, Zdhl]
 
-	def gatherNodes(self):
-		#function to collect the coordinates (specifically the dict keys) that fall in the target interval
-		inInterval = []
-		for k in self.keylist:
-			if k >= self.sampfrom and k<=self.sampto:
-				inInterval.append(k)
-		return inInterval
-		
-	def createCoordList():
-		#create the list of XYZ coords that represents the drillhole interval
-		#result is a dictionary of coords (list) with downhole depth as key
-		
-		#get start coord
-		if self.dhdata.has_key(self.sampfrom):
-			pass #this entry will be picked up by gatherNodes
-		else:
-			resdict[self.sampfrom] = self.downholeLocator(self.sampfrom)
-		#get middle coords
-		for i in self.gatherNodes():
-			resdict[i]=self.dhdata[i]		
-		
-		#getend coord
-		if self.dhdata.has_key(self.sampto):
-			pass #this entry was picked up by gatherNodes
-		else:
-			resdict[self.sampto] = self.downholeLocator(self.sampto)
-		
-		
+    def gatherNodes(self):
+        #function to collect the coordinates (specifically the dict keys) that fall in the target interval
+        inInterval = []
+        for k in self.keylist:
+            if k >= self.sampfrom and k<=self.sampto:
+                inInterval.append(k)
+        return inInterval
+
+    def createCoordList(self):
+        #create the list of XYZ coords that represents the drillhole interval
+        #result is a dictionary of coords (list) with downhole depth as key
+
+        #get start coord
+        if self.dhdata.has_key(self.sampfrom):
+            pass #this entry will be picked up by gatherNodes
+        else:
+            self.intervalcoords[self.sampfrom] = self.downholeLocator(self.sampfrom)
+        #get middle coords
+        for i in self.gatherNodes():
+            self.intervalcoords[i]=self.dhdata[i]		
+
+        #getend coord
+        if self.dhdata.has_key(self.sampto):
+            pass #this entry was picked up by gatherNodes
+        else:
+            self.intervalcoords[self.sampto] = self.downholeLocator(self.sampto)
+
+
 		
 		
 		
 	
-	
-	
+def logPlanBuilder():
+    #a function to take an attribute table with drillhole log data and create traces for each entry
+
+    #load the log file 
+    logdata = QgsVectorLayer('E:\GitHub\DrillHandler\magsus.csv', 'magsus', 'ogr')
+    logprov=logdata.dataProvider()
+    #create iterator
+    logiter = logdata.getFeatures()
+    #create the new shapefile
+    writer = QgsVectorFileWriter("E:\GitHub\DrillHandler\log.shp", "CP1250",logprov.fields(), QGis.WKBLineString, logprov.crs(),'ESRI Shapefile')
+    #iterate over all log entries and create the trace geometries into the new shapefile
+    for logfeature in logiter:
+        #initialise variables
+        holeid = logfeature.attributes()[logfeature.fieldNameIndex('HoleID')]
+        lsampfrom =float( logfeature.attributes()[logfeature.fieldNameIndex('From')])
+        lsampto = float(logfeature.attributes()[logfeature.fieldNameIndex('To')])
+        holeXYZ = drillXYZ[holeid] #eventually will make so this is passed to the function
+        print "holeXYZ", holeXYZ
+        print"from", lsampfrom
+        print"to", lsampto
+        #build the interval coords
+        loginterval = IntervalCoordBuilder(holeXYZ, lsampfrom, lsampto)
+        logresultinterval= loginterval.intervalcoords
+        #create the geometry from the interval coords
+        logtrace = geomBuilder(logresultinterval)
+        #create a new feature, set geometry from above and add the attributes from original data table
+        logfeat=QgsFeature()
+        logfeat.setGeometry(logtrace)
+        logfeat.setAttributes(logfeature.attributes())
+        writer.addFeature(logfeat)
+        #logfeatures.append(logfeat)
+    del writer
+    loglayer =QgsVectorLayer("E:\GitHub\DrillHandler\log.shp", "magsuslog", 'ogr')
+    QgsMapLayerRegistry.instance().addMapLayer(loglayer)
+
+
 #the execution sequence
 #create empty containers
 drillholes = {}
@@ -276,6 +312,27 @@ drillholeXYZ = {}
 #start executing the methods
 drillholes = readFromFile()
 drillXYZ=calcXYZ(drillholes)
-print "drill coordinates", drillXYZ
-#writeLayer(drillXYZ)
+#print "drill coordinates", drillXYZ
+
+
+writeLayer(drillXYZ)
+logPlanBuilder()
 #calculate XYZ coords for all drillholes
+
+#test writing interval feature
+#testhole= drillXYZ['DD01']
+#print "testing hole", testhole
+#interval = IntervalCoordBuilder(testhole, 55, 60)
+#resultinterval= interval.intervalcoords
+#print 'interval coords', resultinterval
+#ilayer = QgsVectorLayer("LineString", "interval", "memory")
+#ipr = ilayer.dataProvider()
+#ifeatures=[]
+
+#itrace = geomBuilder(resultinterval)
+#ifeat=QgsFeature()
+#ifeat.setGeometry(itrace)
+#ifeatures.append(ifeat)
+
+#ipr.addFeatures(ifeatures)
+#QgsMapLayerRegistry.instance().addMapLayer(ilayer)
