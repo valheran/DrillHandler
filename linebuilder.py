@@ -53,7 +53,7 @@ class DrillholeCoordBuilder:
     def calc(self, sampfrom, sampto, dip, azi):
         #calculates the coordinates at the sampto downhole length using the previous coord as a start poit
         #ie the sampfrom location
-        rdip = math.radians(dip)
+        rdip = math.radians(dip)  
         razi = math.radians(azi)
 
         downholelength = sampto - sampfrom
@@ -208,7 +208,7 @@ class IntervalCoordBuilder:
         #initialise instance variables
         self.dhdata = drillholedata #the XYZ dictionary for the target drillhole
         self.keylist= self.dhdata.keys()
-        print"keylist", self.keylist
+        #print"keylist", self.keylist
         self.sampfrom = sampfrom
         self.sampto = sampto
         #initialise result container which will be used to build geometries
@@ -216,24 +216,28 @@ class IntervalCoordBuilder:
         #execute algorithm to create coords
         self.createCoordList()
     
-    def downholeLocator(self, downholelength):
+    def downholeLocator(self, downholedepth):
         #a function to retrieve XYZ coordinates of any given downhole depth
-        dhl = downholelength #the target downhole depth to find
-        print "DHL", dhl
-        idx = bisect.bisect(self.keylist, dhl) -1 #search for the insertion point suitable for target depth, and give index of closests uphole entry    
+        dhd = downholedepth #the target downhole depth to find
+        print "DHdepth", dhd
+        idx = bisect.bisect(self.keylist, dhd) -1 #search for the insertion point suitable for target depth, and give index of closests uphole entry    
         print "idx", idx
         upholenode = self.keylist[idx] #the dh depth of the closest node uphole of target
         print"upholenode", upholenode
         dholenode = self.keylist[idx+1]
-        extension = dhl-upholenode #the distance past the node to reach desired dh depth
+        print "dholenode", dholenode
+        dhlength = dholenode - upholenode
+        extension = dhd-upholenode #the distance past the node to reach desired dh depth
         uhncoord = self.dhdata[upholenode] #retrieve the XYZ coords of the uphole node
         dhncoord = self.dhdata[dholenode]
-        alpha = math.atan((dhncoord[0]-uhncoord[0])/(dhncoord[2]-uhncoord[2])) #calculate the angle in the XZ plane
-        beta = math.atan((dhncoord[1]-uhncoord[1])/(dhncoord[2]-uhncoord[2])) #calculate angle in the YZ plane
+        print " node coords", uhncoord, dhncoord
+        alpha =  math.acos((dhncoord[2]-uhncoord[2])/dhlength)
+        theta = math.asin((dhncoord[0]-uhncoord[0])/dhlength)
+        phi = math.asin((dhncoord[1]-uhncoord[1])/dhlength)
         #calculate the coords for the target dhl using the uphole node and the now known angles
-        Xdhl = uhncoord[0] - math.sin(alpha)* extension
-        Ydhl = uhncoord[1] - math.sin(beta) * extension
-        Zdhl = uhncoord[2] - math.cos(alpha) * extension
+        Xdhl = uhncoord[0] +math.sin(theta)* extension
+        Ydhl = uhncoord[1] + math.sin(phi) * extension
+        Zdhl = uhncoord[2] + math.cos(alpha) * extension
             
         return [Xdhl, Ydhl, Zdhl]
 
@@ -282,7 +286,7 @@ class LogDrawer:
         # Get sample
         sample = reader.next()
         fieldsample = dict(zip(header, sample))
-        print "fieldsample", fieldsample
+        #print "fieldsample", fieldsample
         fieldnametypes = {}
         # create dict of fieldname:type
         for key in fieldsample.keys():
@@ -317,11 +321,12 @@ class LogDrawer:
             lsampfrom =float( logfeature.attributes()[logfeature.fieldNameIndex('From')])
             lsampto = float(logfeature.attributes()[logfeature.fieldNameIndex('To')])
             holeXYZ = self.holecoords[holeid]
-            print "holeXYZ", holeXYZ
-            print"from", lsampfrom
-            print"to", lsampto
+            #print "holeXYZ", holeXYZ
+            #print"from", lsampfrom
+            #print"to", lsampto
             loginterval = IntervalCoordBuilder(holeXYZ, lsampfrom, lsampto)
             logresultinterval= loginterval.intervalcoords
+            print "interval", logresultinterval
             #create the geometry from the interval coords
             logtrace = geomBuilder(logresultinterval)
             #create a new feature, set geometry from above and add the attributes from original data table
