@@ -29,26 +29,28 @@ class DrillholeCoordBuilder:
         self.temp={0:[self.Xo, self.Yo, self.Zo]} #sets up the collar coordinate
        # self.results = collections.OrderedDict()
         #create the list of 3D co-ordinates downhole
-        
-        #Try and modify this part of the algorithm to allo0w for single depth survey input, which is more common
-        #this can probably be achieved using a similar loop to that found in the interval coord builder class
-        for keys in survey:
             
-            slist=survey[keys]
-            #print slist
-            #print type(slist[0])
+        k = 0
+        while k < (len(survey.keys())-1):
+            slist = survey[k]
+            
             sampfrom = float(slist[0])
-            sampto=float(slist[1])
-            dip = float(slist[2])
-            azi = float(slist[3])
+            
+            dip = float(slist[1])
+            azi = float(slist[2])
+            try:
+                slist2 = survey[k+1]
+                sampto=float(slist2[0])
+            except KeyError:
+            
             coords = self.calc(sampfrom, sampto, dip, azi)
             self.Xo=coords[0]
             self.Yo=coords[1]
             self.Zo=coords[2]
-            #reskey = int(keys)+1 #to keep the result keys one interger ahead as 0 is already been used when initialised this is from old version
-            #that didnt use downhole length as the key
             self.temp[sampto] = coords
+            k=k+1
             #print coords
+       
         #convert into an ordered dictionary (sequential downhole depth) to help with searchability
         self.results = collections.OrderedDict(sorted(self.temp.items()))
 
@@ -84,7 +86,7 @@ def geomBuilder(coordlist):
 def readFromFile():
     collars = []
     drillholes = {}
-    with open(r'E:\GitHub\DrillHandler\EHCollar.csv', 'r') as col:
+    with open(r'E:\GitHub\DrillHandler\collars.csv', 'r') as col:
         next(col)
         readercol=csv.reader(col)
             
@@ -94,13 +96,13 @@ def readFromFile():
             a = holeid
             i=0
                     
-            with open(r'E:\GitHub\DrillHandler\EHSurvey.csv', 'r') as sur:
+            with open(r'E:\GitHub\DrillHandler\surveys.csv', 'r') as sur:
                 next(sur)
                 readersur = csv.reader(sur)
                 surveys={}
-                for hole, sampfrom, sampto,dip,azi in readersur:
+                for hole, depth,dip,azi in readersur:
                     if hole ==a:
-                        surv = [sampfrom, sampto, dip, azi]
+                        surv = [depth, dip, azi]
                         surveys[i]=surv
                         i=i+1
                 #print"survey from file", surveys
@@ -110,15 +112,6 @@ def readFromFile():
                 drillholes[holeid] = [collars, desurvey] 
     #print drillholes
     return drillholes
-"""collar1 =[1,1,100]
-survey1 = {1:[0,30,45, 45], 2:[30,60,45, 45], 3:[60,90,45, 45]} 
-collar2 =[20,10,100]
-survey2 = {1:[0,30,45, 45], 2:[30,60,45, 45], 3:[60,90,45, 45]} 
-collar3 =[0,20,100]
-survey3 = {1:[0,30,45, 45], 2:[30,60,45, 45], 3:[60,90,45, 45]} 
-
-drillholes = {'DD01':[collar1, survey1], 'DD02':[collar2, survey2], 'DD03':[collar3, survey3]}
-"""
 
 def calcXYZ(drillholes):
 #calculate XYZ coords for all drillholes
@@ -163,10 +156,10 @@ def densifySurvey(data):
         list2=d[next] #the next survey in the sequence)
         dh1 = float(list[0])
         dh2= float(list2[0])
-        dip1=float(list[2])
-        dip2=float(list2[2])
-        azi1=float(list[3])
-        azi2 = float(list2[3])
+        dip1=float(list[1])
+        dip2=float(list2[1])
+        azi1=float(list[2])
+        azi2 = float(list2[2])
         #print dhl, dip1, dip2, azi1, azi2
         #print "iteration", entry
         
@@ -185,7 +178,7 @@ def densifySurvey(data):
                 if aziInterp >360:     #correct for azi's greater than 360
                     aziInterp = aziInterp-360
                     
-                interpsurv = [objects, interpdhlList[item +1], dipInterp, aziInterp]
+                interpsurv = [objects, dipInterp, aziInterp]
                 densurvey[newkey]=interpsurv
                 newkey=newkey+1
                 #print interpsurv
@@ -196,12 +189,6 @@ def densifySurvey(data):
     newkey=newkey+1
     densurvey[newkey]=d[entry]
     return densurvey  
-
-
-
-    
- #make a function to lookup a drillhole  and pull a downhole coordinateMode
-
 
 class IntervalCoordBuilder:
 #a class which calculates the XYZ coords for a specified interval of a given drillhole
@@ -354,24 +341,5 @@ drillXYZ=calcXYZ(drillholes)
 
 
 writeLayer(drillXYZ)
-logfilepath = "E:\GitHub\DrillHandler\EHAssay.csv"
+logfilepath = "E:\GitHub\DrillHandler\magsus.csv"
 LogDrawer(drillXYZ, logfilepath)
-#calculate XYZ coords for all drillholes
-
-#test writing interval feature
-#testhole= drillXYZ['DD01']
-#print "testing hole", testhole
-#interval = IntervalCoordBuilder(testhole, 55, 60)
-#resultinterval= interval.intervalcoords
-#print 'interval coords', resultinterval
-#ilayer = QgsVectorLayer("LineString", "interval", "memory")
-#ipr = ilayer.dataProvider()
-#ifeatures=[]
-
-#itrace = geomBuilder(resultinterval)
-#ifeat=QgsFeature()
-#ifeat.setGeometry(itrace)
-#ifeatures.append(ifeat)
-
-#ipr.addFeatures(ifeatures)
-#QgsMapLayerRegistry.instance().addMapLayer(ilayer)
