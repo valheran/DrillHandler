@@ -30,6 +30,8 @@ class DrillholeCoordBuilder:
        # self.results = collections.OrderedDict()
         #create the list of 3D co-ordinates downhole
         
+        #Try and modify this part of the algorithm to allo0w for single depth survey input, which is more common
+        #this can probably be achieved using a similar loop to that found in the interval coord builder class
         for keys in survey:
             
             slist=survey[keys]
@@ -82,7 +84,7 @@ def geomBuilder(coordlist):
 def readFromFile():
     collars = []
     drillholes = {}
-    with open(r'E:\GitHub\DrillHandler\collars.csv', 'r') as col:
+    with open(r'E:\GitHub\DrillHandler\EHCollar.csv', 'r') as col:
         next(col)
         readercol=csv.reader(col)
             
@@ -92,7 +94,7 @@ def readFromFile():
             a = holeid
             i=0
                     
-            with open(r'E:\GitHub\DrillHandler\surveys.csv', 'r') as sur:
+            with open(r'E:\GitHub\DrillHandler\EHSurvey.csv', 'r') as sur:
                 next(sur)
                 readersur = csv.reader(sur)
                 surveys={}
@@ -219,18 +221,18 @@ class IntervalCoordBuilder:
     def downholeLocator(self, downholedepth):
         #a function to retrieve XYZ coordinates of any given downhole depth
         dhd = downholedepth #the target downhole depth to find
-        print "DHdepth", dhd
+        #print "DHdepth", dhd
         idx = bisect.bisect(self.keylist, dhd) -1 #search for the insertion point suitable for target depth, and give index of closests uphole entry    
-        print "idx", idx
+        #print "idx", idx
         upholenode = self.keylist[idx] #the dh depth of the closest node uphole of target
-        print"upholenode", upholenode
+        #print"upholenode", upholenode
         dholenode = self.keylist[idx+1]
-        print "dholenode", dholenode
+        #print "dholenode", dholenode
         dhlength = dholenode - upholenode
         extension = dhd-upholenode #the distance past the node to reach desired dh depth
         uhncoord = self.dhdata[upholenode] #retrieve the XYZ coords of the uphole node
         dhncoord = self.dhdata[dholenode]
-        print " node coords", uhncoord, dhncoord
+        #print " node coords", uhncoord, dhncoord
         alpha =  math.acos((dhncoord[2]-uhncoord[2])/dhlength)
         theta = math.asin((dhncoord[0]-uhncoord[0])/dhlength)
         phi = math.asin((dhncoord[1]-uhncoord[1])/dhlength)
@@ -326,7 +328,7 @@ class LogDrawer:
             #print"to", lsampto
             loginterval = IntervalCoordBuilder(holeXYZ, lsampfrom, lsampto)
             logresultinterval= loginterval.intervalcoords
-            print "interval", logresultinterval
+            #print "interval", logresultinterval
             #create the geometry from the interval coords
             logtrace = geomBuilder(logresultinterval)
             #create a new feature, set geometry from above and add the attributes from original data table
@@ -352,7 +354,7 @@ drillXYZ=calcXYZ(drillholes)
 
 
 writeLayer(drillXYZ)
-logfilepath = "E:\GitHub\DrillHandler\magsus.csv"
+logfilepath = "E:\GitHub\DrillHandler\EHAssay.csv"
 LogDrawer(drillXYZ, logfilepath)
 #calculate XYZ coords for all drillholes
 
