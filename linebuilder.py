@@ -42,6 +42,7 @@ class DrillholeCoordBuilder:
                 slist2 = survey[k+1]
                 sampto=float(slist2[0])
             except KeyError:
+                sampto = float(collar[3]) #make the last sampto the EOH depth
             
             coords = self.calc(sampfrom, sampto, dip, azi)
             self.Xo=coords[0]
