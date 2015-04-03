@@ -26,35 +26,49 @@ class DrillholeCoordBuilder:
         self.Yo = float(collar[1])
         self.Zo = float(collar[2])
         self.survey = survey
+        #print "survey dict", survey
         self.temp={0:[self.Xo, self.Yo, self.Zo]} #sets up the collar coordinate
        # self.results = collections.OrderedDict()
         #create the list of 3D co-ordinates downhole
             
-        k = 0
-        while k < (len(survey.keys())-1):
-            slist = survey[k]
-            
+       
+        skeys = len(survey.keys())
+        if skeys > 1:
+            k = 0
+            while k < (skeys-1):
+                slist = survey[k]
+                sampfrom = float(slist[0])
+                
+                dip = float(slist[1])
+                azi = float(slist[2])
+                try:
+                    slist2 = survey[k+1]
+                    sampto=float(slist2[0])
+                except KeyError:
+                    sampto = float(collar[3]) #make the last sampto the EOH depth
+                   
+                coords = self.calc(sampfrom, sampto, dip, azi)
+                self.Xo=coords[0]
+                self.Yo=coords[1]
+                self.Zo=coords[2]
+                self.temp[sampto] = coords
+                k=k+1
+        else:
+            slist = survey[0]
             sampfrom = float(slist[0])
-            
             dip = float(slist[1])
             azi = float(slist[2])
-            try:
-                slist2 = survey[k+1]
-                sampto=float(slist2[0])
-            except KeyError:
-                sampto = float(collar[3]) #make the last sampto the EOH depth
+            sampto = float(collar[3]) #make the last sampto the EOH depth
             
             coords = self.calc(sampfrom, sampto, dip, azi)
             self.Xo=coords[0]
             self.Yo=coords[1]
             self.Zo=coords[2]
             self.temp[sampto] = coords
-            k=k+1
-            #print coords
-       
+         
         #convert into an ordered dictionary (sequential downhole depth) to help with searchability
         self.results = collections.OrderedDict(sorted(self.temp.items()))
-
+        
     def calc(self, sampfrom, sampto, dip, azi):
         #calculates the coordinates at the sampto downhole length using the previous coord as a start poit
         #ie the sampfrom location
@@ -69,7 +83,7 @@ class DrillholeCoordBuilder:
         coords = [X,Y,Z]
         return coords
 #function to build the traces from coords
-def geomBuilder(coordlist):
+def planGeomBuilder(coordlist):
     #takes a dictionary of lists (XYZ) coords. and creates a list of XY coord pairs(ie for plan view.
     #this is then converted into a QGS polyline object that can then be written to a layer
     #keys are unimportant
@@ -78,26 +92,46 @@ def geomBuilder(coordlist):
         coordsXYZ=coordlist[index]
         node =QgsPoint(coordsXYZ[0], coordsXYZ[1])
         nodestring.append(node)
-        
     linestring = QgsGeometry.fromPolyline(nodestring)
-    return linestring    
-    
+    return linestring   
+	
+def sectionGeomBuilder(coordlist, sectionplane):
+#a function that takes a dictionary of lists (XYZ) and creates a list of
+#coordinate pairs within the defined vertical plane. plane is a list of 
+#origon (x,y) and azimuth of the target vertical section [x,y,azi]
+	nodestring = []
+	for index in coordlist:
+		coordsXYZ = coordlist[index]
+		tarpoint = [coordsXYZ[0], coordsXYZ[1]]
+		delX = tarpoint[0] -sectionplane[0]
+		delY =  tarpoint[1] - sectionplane[1]
+		dist = math.sqrt( delX**2  +  delY**2)
+		#calculate the angle from origin to tarpoint
+		alpha = math.atan2(delY, delX) 
+		#calculate the angle between the point and the plane 90- azi to set radians to start at north
+		beta = alpha - math.radians(90 - sectionplane[2] )
+		#calculate the along section coord using beta and distance from origin
+		xS = math.cos(beta) * dist
+		node = QgsPoint(xS, coordsXYZ[2])
+		nodestring.append(node)
+	linestring = QgsGeometry.fromPolyline(nodestring)
+    return linestring
     
  #read collar and survey files into drillholes dict file
 def readFromFile():
     collars = []
     drillholes = {}
-    with open(r'E:\GitHub\DrillHandler\collars.csv', 'r') as col:
+    with open(r'E:\GitHub\DrillHandler\EHCollar.csv', 'r') as col:
         next(col)
         readercol=csv.reader(col)
             
         for holeid,x,y,z,EOH in readercol:
-            
+            #print "holeid", holeid
             collars=[x,y,z,EOH]
             a = holeid
             i=0
                     
-            with open(r'E:\GitHub\DrillHandler\surveys.csv', 'r') as sur:
+            with open(r'E:\GitHub\DrillHandler\EHSurvey.csv', 'r') as sur:
                 next(sur)
                 readersur = csv.reader(sur)
                 surveys={}
@@ -107,10 +141,15 @@ def readFromFile():
                         surveys[i]=surv
                         i=i+1
                 #print"survey from file", surveys
-                desurvey = densifySurvey(surveys)    #run desurvey/densify algorithm
+                #determine if desurvey is appropriate (ie more than one survey)
+                if len(surveys.keys())>1:
+                    desurvey = densifySurvey(surveys)    #run desurvey/densify algorithm
+                else:
+                    desurvey = surveys
                 #print "survey", surveys
                 #print "desurvey",desurvey
-                drillholes[holeid] = [collars, desurvey] 
+                drillholes[holeid] = [collars, desurvey]
+                #print "drillhole %s loaded and desurveyed" % (holeid) 
     #print drillholes
     return drillholes
 
@@ -122,6 +161,7 @@ def calcXYZ(drillholes):
         survey =holedata[1]
         trace = DrillholeCoordBuilder(collar, survey)
         drillholeXYZ[holes] = trace.results
+        #print "drillhole %s built" % (holes)
     return drillholeXYZ
     
 def writeLayer(drillXYZ): 
@@ -132,9 +172,13 @@ def writeLayer(drillXYZ):
     features=[]
     for holes in drillXYZ:
         holedat = drillXYZ[holes]
-        trace = geomBuilder(holedat)
+        trace = planGeomBuilder(holedat)
         feat=QgsFeature()
-        feat.setGeometry(trace)
+        try:
+            feat.setGeometry(trace)
+        except TypeError:
+            msg = "Hole %s has invalid geometry" % (holes)
+            print msg
         features.append(feat)
         
     pr.addFeatures(features)
@@ -144,7 +188,7 @@ def writeLayer(drillXYZ):
     
 def densifySurvey(data):
     #a drillhole desurvey tool using simple smooth interpolation of dip and azimuth 
-    #between survey points
+    #between survey points. data is a dict {idx:[depth, dip, azi]} where index  starts at 0 and increments
     d=data
     i=len(d.keys())-1
     entry=0
@@ -186,8 +230,12 @@ def densifySurvey(data):
             except IndexError:
                 pass
         entry = entry +1
+    
+    #this will disturb single survey dictionaries (causing the first key to be 1, so
+    #it is best this function is not run on holes with single survey
+    newkey=newkey+1 
     #add on final survey entry (from last survey to end of hole) as cant be interpolated
-    newkey=newkey+1
+    
     densurvey[newkey]=d[entry]
     return densurvey  
 
@@ -221,9 +269,11 @@ class IntervalCoordBuilder:
         uhncoord = self.dhdata[upholenode] #retrieve the XYZ coords of the uphole node
         dhncoord = self.dhdata[dholenode]
         #print " node coords", uhncoord, dhncoord
-        alpha =  math.acos((dhncoord[2]-uhncoord[2])/dhlength)
-        theta = math.asin((dhncoord[0]-uhncoord[0])/dhlength)
-        phi = math.asin((dhncoord[1]-uhncoord[1])/dhlength)
+        #the following uses round as a hack to avoid floating point issues with 1 and -1 in the trig functions
+        alpha =  math.acos(round((dhncoord[2]-uhncoord[2])/dhlength, 10))
+        theta = math.asin(round((dhncoord[0]-uhncoord[0])/dhlength, 10))
+        phi = math.asin(round((dhncoord[1]-uhncoord[1])/dhlength, 10))
+       
         #calculate the coords for the target dhl using the uphole node and the now known angles
         Xdhl = uhncoord[0] +math.sin(theta)* extension
         Ydhl = uhncoord[1] + math.sin(phi) * extension
@@ -310,20 +360,32 @@ class LogDrawer:
             holeid = logfeature.attributes()[logfeature.fieldNameIndex('HoleID')]
             lsampfrom =float( logfeature.attributes()[logfeature.fieldNameIndex('From')])
             lsampto = float(logfeature.attributes()[logfeature.fieldNameIndex('To')])
-            holeXYZ = self.holecoords[holeid]
+            logtrace= None  #reset the logtrace container in case of error from previous iteration
+            
             #print "holeXYZ", holeXYZ
             #print"from", lsampfrom
             #print"to", lsampto
-            loginterval = IntervalCoordBuilder(holeXYZ, lsampfrom, lsampto)
-            logresultinterval= loginterval.intervalcoords
-            #print "interval", logresultinterval
-            #create the geometry from the interval coords
-            logtrace = geomBuilder(logresultinterval)
+            try:
+                holeXYZ = self.holecoords[holeid]
+                loginterval = IntervalCoordBuilder(holeXYZ, lsampfrom, lsampto)
+                logresultinterval= loginterval.intervalcoords
+                #print "interval", logresultinterval
+                #create the geometry from the interval coords
+                logtrace = planGeomBuilder(logresultinterval)
+            except (IndexError, ValueError) as e:
+                msg = "Something wrong with log data in %s at %s to %s: %s" % (holeid, lsampfrom, lsampto, e)
+                print msg
+            except KeyError:
+                msg = "Data for hole that does not exist %s" % (holeid)
+                print msg
             #create a new feature, set geometry from above and add the attributes from original data table
             logfeat=QgsFeature()
-            logfeat.setGeometry(logtrace)
-            logfeat.setAttributes(logfeature.attributes())
-            writer.addFeature(logfeat)
+            try:
+                logfeat.setGeometry(logtrace)
+                logfeat.setAttributes(logfeature.attributes())
+                writer.addFeature(logfeat)
+            except TypeError as e:
+                print "geometry could not be made for %s %s %s %s" % (holeid, lsampfrom, lsampto, e)
             #logfeatures.append(logfeat)
         del writer
         #the following should probably be (re)moved in the final version to a more appropriate location
@@ -342,5 +404,5 @@ drillXYZ=calcXYZ(drillholes)
 
 
 writeLayer(drillXYZ)
-logfilepath = "E:\GitHub\DrillHandler\magsus.csv"
+logfilepath = "E:\GitHub\DrillHandler\EHAssay.csv"
 LogDrawer(drillXYZ, logfilepath)
