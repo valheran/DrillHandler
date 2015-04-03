@@ -94,34 +94,34 @@ def planGeomBuilder(coordlist):
         nodestring.append(node)
     linestring = QgsGeometry.fromPolyline(nodestring)
     return linestring   
-	
+
 def sectionGeomBuilder(coordlist, sectionplane):
 #a function that takes a dictionary of lists (XYZ) and creates a list of
 #coordinate pairs within the defined vertical plane. plane is a list of 
 #origon (x,y) and azimuth of the target vertical section [x,y,azi]
-	nodestring = []
-	for index in coordlist:
-		coordsXYZ = coordlist[index]
-		tarpoint = [coordsXYZ[0], coordsXYZ[1]]
-		delX = tarpoint[0] -sectionplane[0]
-		delY =  tarpoint[1] - sectionplane[1]
-		dist = math.sqrt( delX**2  +  delY**2)
-		#calculate the angle from origin to tarpoint
-		alpha = math.atan2(delY, delX) 
-		#calculate the angle between the point and the plane 90- azi to set radians to start at north
-		beta = alpha - math.radians(90 - sectionplane[2] )
-		#calculate the along section coord using beta and distance from origin
-		xS = math.cos(beta) * dist
-		node = QgsPoint(xS, coordsXYZ[2])
-		nodestring.append(node)
-	linestring = QgsGeometry.fromPolyline(nodestring)
+    nodestring = []
+    for index in coordlist:
+        coordsXYZ = coordlist[index]
+        tarpoint = [coordsXYZ[0], coordsXYZ[1]]
+        delX = tarpoint[0] -sectionplane[0]
+        delY =  tarpoint[1] - sectionplane[1]
+        dist = math.sqrt( delX**2  +  delY**2)
+        #calculate the angle from origin to tarpoint
+        alpha = math.atan2(delY, delX) 
+        #calculate the angle between the point and the plane 90- azi to set radians to start at north
+        beta = alpha - math.radians(90 - sectionplane[2] )
+        #calculate the along section coord using beta and distance from origin
+        xS = math.cos(beta) * dist
+        node = QgsPoint(xS, coordsXYZ[2])
+        nodestring.append(node)
+    linestring = QgsGeometry.fromPolyline(nodestring)
     return linestring
     
- #read collar and survey files into drillholes dict file
+    #read collar and survey files into drillholes dict file
 def readFromFile():
     collars = []
     drillholes = {}
-    with open(r'E:\GitHub\DrillHandler\EHCollar.csv', 'r') as col:
+    with open(r'E:\GitHub\DrillHandler\Collar.csv', 'r') as col:
         next(col)
         readercol=csv.reader(col)
             
@@ -131,7 +131,7 @@ def readFromFile():
             a = holeid
             i=0
                     
-            with open(r'E:\GitHub\DrillHandler\EHSurvey.csv', 'r') as sur:
+            with open(r'E:\GitHub\DrillHandler\Survey.csv', 'r') as sur:
                 next(sur)
                 readersur = csv.reader(sur)
                 surveys={}
@@ -164,7 +164,7 @@ def calcXYZ(drillholes):
         #print "drillhole %s built" % (holes)
     return drillholeXYZ
     
-def writeLayer(drillXYZ): 
+def writeLayer(drillXYZ, plan=True, sectionplane=None): 
     #create a layer to hold plan drill traces
     layer = QgsVectorLayer("LineString", "Drill traces", "memory")
     pr = layer.dataProvider()
@@ -172,7 +172,11 @@ def writeLayer(drillXYZ):
     features=[]
     for holes in drillXYZ:
         holedat = drillXYZ[holes]
-        trace = planGeomBuilder(holedat)
+        if plan:
+            trace = planGeomBuilder(holedat)
+        else:
+            trace = sectionGeomBuilder(holedat, sectionplane)
+            
         feat=QgsFeature()
         try:
             feat.setGeometry(trace)
@@ -311,12 +315,14 @@ class IntervalCoordBuilder:
 
 class LogDrawer:
 #class to draw attributed traces of drillholes from tabular log data
-    def __init__(self, drillholedata, logfile):
+    def __init__(self, drillholedata, logfile, plan=True, sectionplane=None):
         self.holecoords = drillholedata #set the XYZ coord data for the drillhole dataset
         self.logfile = logfile #path of the target logfile
         self.tlayer = self.createEmptyLog()
-        self.logPlanBuilder()
-
+        self.plantoggle = plan
+        self.sectionplane = sectionplane
+        self.logBuilder()
+        
     def createEmptyLog(self):
         #function to create a memory layer with correct field types from the csv logfile
         
@@ -343,7 +349,7 @@ class LogDrawer:
         tlayer = QgsVectorLayer(uri, "templayer", "memory")
         return tlayer
 
-    def logPlanBuilder(self):
+    def logBuilder(self):
         #a function to take an attribute table with drillhole log data and create traces for each entry
 
         #load the log file 
@@ -371,7 +377,12 @@ class LogDrawer:
                 logresultinterval= loginterval.intervalcoords
                 #print "interval", logresultinterval
                 #create the geometry from the interval coords
-                logtrace = planGeomBuilder(logresultinterval)
+                if self.plantoggle:
+                #create layers in plan view
+                    logtrace = planGeomBuilder(logresultinterval)
+                else:
+                    logtrace = sectionGeomBuilder(logresultinterval, self.sectionplane)
+                    
             except (IndexError, ValueError) as e:
                 msg = "Something wrong with log data in %s at %s to %s: %s" % (holeid, lsampfrom, lsampto, e)
                 print msg
@@ -402,7 +413,7 @@ drillholes = readFromFile()
 drillXYZ=calcXYZ(drillholes)
 #print "drill coordinates", drillXYZ
 
-
-writeLayer(drillXYZ)
-logfilepath = "E:\GitHub\DrillHandler\EHAssay.csv"
-LogDrawer(drillXYZ, logfilepath)
+plane=[0,0,90]
+writeLayer(drillXYZ, plan=False, sectionplane=plane)
+logfilepath = "E:\GitHub\DrillHandler\magsus.csv"
+LogDrawer(drillXYZ, logfilepath, plan=False, sectionplane=plane)
