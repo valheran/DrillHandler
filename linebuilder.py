@@ -1,19 +1,9 @@
-
+import os
 import math
 import csv
 import numpy as np
 import collections
 import bisect
-# planned sequence of events
-#1 read in data from file splitting out by hole id
-# make a dictionary of collars using holeid as key
-# for each hole make a survey dictionary. Perhaps this can actually done by making a dictionary using hole id as key
-#and a list of [collar, survey] as the items
-#2 make the trace coordinates by iterating the DrillholeCoordBuilder class over the drillhole dictionary, returning a
-#sequence of x,y,z co-ords for each hole
-#3 using these coords, create line segments in a shape file to represent the trace in plan view
-#Then need to figure out how to add log data as attributes- perhaps by breaking down the hole into more segments
-
 
 
 class DrillholeCoordBuilder:
@@ -82,166 +72,6 @@ class DrillholeCoordBuilder:
         Z = self.Zo - math.sin(rdip) * downholelength
         coords = [X,Y,Z]
         return coords
-#function to build the traces from coords
-def planGeomBuilder(coordlist):
-    #takes a dictionary of lists (XYZ) coords. and creates a list of XY coord pairs(ie for plan view.
-    #this is then converted into a QGS polyline object that can then be written to a layer
-    #keys are unimportant
-    nodestring =[]
-    for index in coordlist:
-        coordsXYZ=coordlist[index]
-        node =QgsPoint(coordsXYZ[0], coordsXYZ[1])
-        nodestring.append(node)
-    linestring = QgsGeometry.fromPolyline(nodestring)
-    return linestring   
-
-def sectionGeomBuilder(coordlist, sectionplane):
-#a function that takes a dictionary of lists (XYZ) and creates a list of
-#coordinate pairs within the defined vertical plane. plane is a list of 
-#origon (x,y) and azimuth of the target vertical section [x,y,azi]
-    nodestring = []
-    for index in coordlist:
-        coordsXYZ = coordlist[index]
-        tarpoint = [coordsXYZ[0], coordsXYZ[1]]
-        delX = tarpoint[0] -sectionplane[0]
-        delY =  tarpoint[1] - sectionplane[1]
-        dist = math.sqrt( delX**2  +  delY**2)
-        #calculate the angle from origin to tarpoint
-        alpha = math.atan2(delY, delX) 
-        #calculate the angle between the point and the plane 90- azi to set radians to start at north
-        beta = alpha - math.radians(90 - sectionplane[2] )
-        #calculate the along section coord using beta and distance from origin
-        xS = math.cos(beta) * dist
-        node = QgsPoint(xS, coordsXYZ[2])
-        nodestring.append(node)
-    linestring = QgsGeometry.fromPolyline(nodestring)
-    return linestring
-    
-    #read collar and survey files into drillholes dict file
-def readFromFile():
-    collars = []
-    drillholes = {}
-    with open(r'E:\GitHub\DrillHandler\Collar.csv', 'r') as col:
-        next(col)
-        readercol=csv.reader(col)
-            
-        for holeid,x,y,z,EOH in readercol:
-            #print "holeid", holeid
-            collars=[x,y,z,EOH]
-            a = holeid
-            i=0
-                    
-            with open(r'E:\GitHub\DrillHandler\Survey.csv', 'r') as sur:
-                next(sur)
-                readersur = csv.reader(sur)
-                surveys={}
-                for hole, depth,dip,azi in readersur:
-                    if hole ==a:
-                        surv = [depth, dip, azi]
-                        surveys[i]=surv
-                        i=i+1
-                #print"survey from file", surveys
-                #determine if desurvey is appropriate (ie more than one survey)
-                if len(surveys.keys())>1:
-                    desurvey = densifySurvey(surveys)    #run desurvey/densify algorithm
-                else:
-                    desurvey = surveys
-                #print "survey", surveys
-                #print "desurvey",desurvey
-                drillholes[holeid] = [collars, desurvey]
-                #print "drillhole %s loaded and desurveyed" % (holeid) 
-    #print drillholes
-    return drillholes
-
-def calcXYZ(drillholes):
-#calculate XYZ coords for all drillholes
-    for holes in drillholes:
-        holedata = drillholes[holes]
-        collar = holedata[0]
-        survey =holedata[1]
-        trace = DrillholeCoordBuilder(collar, survey)
-        drillholeXYZ[holes] = trace.results
-        #print "drillhole %s built" % (holes)
-    return drillholeXYZ
-    
-def writeLayer(drillXYZ, plan=True, sectionplane=None): 
-    #create a layer to hold plan drill traces
-    layer = QgsVectorLayer("LineString", "Drill traces", "memory")
-    pr = layer.dataProvider()
-    #add features to layer
-    features=[]
-    for holes in drillXYZ:
-        holedat = drillXYZ[holes]
-        if plan:
-            trace = planGeomBuilder(holedat)
-        else:
-            trace = sectionGeomBuilder(holedat, sectionplane)
-            
-        feat=QgsFeature()
-        try:
-            feat.setGeometry(trace)
-        except TypeError:
-            msg = "Hole %s has invalid geometry" % (holes)
-            print msg
-        features.append(feat)
-        
-    pr.addFeatures(features)
-      
-    #add layer to map canvas  
-    QgsMapLayerRegistry.instance().addMapLayer(layer)#create a container for data  from file
-    
-def densifySurvey(data):
-    #a drillhole desurvey tool using simple smooth interpolation of dip and azimuth 
-    #between survey points. data is a dict {idx:[depth, dip, azi]} where index  starts at 0 and increments
-    d=data
-    i=len(d.keys())-1
-    entry=0
-    newkey=0 # a key variable for creating the new dictionary
-    densurvey = {}
-    #this works as long as the survey dictionary keys are sequential starting from 0
-    while (entry< i):
-        next=entry +1 
-        list=d[entry]
-        list2=d[next] #the next survey in the sequence)
-        dh1 = float(list[0])
-        dh2= float(list2[0])
-        dip1=float(list[1])
-        dip2=float(list2[1])
-        azi1=float(list[2])
-        azi2 = float(list2[2])
-        #print dhl, dip1, dip2, azi1, azi2
-        #print "iteration", entry
-        
-        interpdhlList=np.linspace(dh1, dh2, num =10) #create the extra downhole locations
-        #need some handling of azis moving between 359 and 001
-        if abs(azi1 - azi2) > 300: #detect when azi's are either side of 360
-            if azi1 <180:
-                azi1 = azi1+360   #add 360 to the smaller number to get a continuous number line to interpolate
-            else:
-                azi2 = azi2 +360
-                
-        for item, objects in enumerate(interpdhlList):
-            try:
-                dipInterp =np.interp(float(objects),[dh1,dh2], [dip1,dip2]) #object is the current dhl to calculate for
-                aziInterp =np.interp(float(objects),[dh1,dh2], [azi1,azi2])
-                if aziInterp >360:     #correct for azi's greater than 360
-                    aziInterp = aziInterp-360
-                    
-                interpsurv = [objects, dipInterp, aziInterp]
-                densurvey[newkey]=interpsurv
-                newkey=newkey+1
-                #print interpsurv
-            except IndexError:
-                pass
-        entry = entry +1
-    
-    #this will disturb single survey dictionaries (causing the first key to be 1, so
-    #it is best this function is not run on holes with single survey
-    newkey=newkey+1 
-    #add on final survey entry (from last survey to end of hole) as cant be interpolated
-    
-    densurvey[newkey]=d[entry]
-    return densurvey  
 
 class IntervalCoordBuilder:
 #a class which calculates the XYZ coords for a specified interval of a given drillhole
@@ -311,7 +141,6 @@ class IntervalCoordBuilder:
             pass #this entry was picked up by gatherNodes
         else:
             self.intervalcoords[self.sampto] = self.downholeLocator(self.sampto)
-
 
 class LogDrawer:
 #class to draw attributed traces of drillholes from tabular log data
@@ -402,18 +231,221 @@ class LogDrawer:
         #the following should probably be (re)moved in the final version to a more appropriate location
         loglayer =QgsVectorLayer("E:\GitHub\DrillHandler\log.shp", "magsuslog", 'ogr')
         QgsMapLayerRegistry.instance().addMapLayer(loglayer)
+	
+
+def planGeomBuilder(coordlist):
+    #takes a dictionary of lists (XYZ) coords. and creates a list of XY coord pairs(ie for plan view.
+    #this is then converted into a QGS polyline object that can then be written to a layer
+    #keys are unimportant
+    nodestring =[]
+    for index in coordlist:
+        coordsXYZ=coordlist[index]
+        node =QgsPoint(coordsXYZ[0], coordsXYZ[1])
+        nodestring.append(node)
+    linestring = QgsGeometry.fromPolyline(nodestring)
+    return linestring   
+
+def sectionGeomBuilder(coordlist, sectionplane):
+#a function that takes a dictionary of lists (XYZ) and creates a list of
+#coordinate pairs within the defined vertical plane. plane is a list of 
+#origon (x,y) and azimuth of the target vertical section [x,y,azi]
+    nodestring = []
+    for index in coordlist:
+        coordsXYZ = coordlist[index]
+        tarpoint = [coordsXYZ[0], coordsXYZ[1]]
+        delX = tarpoint[0] -sectionplane[0]
+        delY =  tarpoint[1] - sectionplane[1]
+        dist = math.sqrt( delX**2  +  delY**2)
+        #calculate the angle from origin to tarpoint
+        alpha = math.atan2(delY, delX) 
+        #calculate the angle between the point and the plane 90- azi to set radians to start at north
+        beta = alpha - math.radians(90 - sectionplane[2] )
+        #calculate the along section coord using beta and distance from origin
+        xS = math.cos(beta) * dist
+        node = QgsPoint(xS, coordsXYZ[2])
+        nodestring.append(node)
+    linestring = QgsGeometry.fromPolyline(nodestring)
+    return linestring
+        
+def readFromFile(collarfile, surveyfile):
+#read collar and survey files into drillholes dict file
+    collars = []
+    drillholes = {}
+    with open(collarfile, 'r') as col:
+        next(col)
+        readercol=csv.reader(col)
+            
+        for holeid,x,y,z,EOH in readercol:
+            #print "holeid", holeid
+            collars=[x,y,z,EOH]
+            a = holeid
+            i=0
+                    
+            with open(surveyfile, 'r') as sur:
+                next(sur)
+                readersur = csv.reader(sur)
+                surveys={}
+                for hole, depth,dip,azi in readersur:
+                    if hole ==a:
+                        surv = [depth, dip, azi]
+                        surveys[i]=surv
+                        i=i+1
+                #print"survey from file", surveys
+                #determine if desurvey is appropriate (ie more than one survey)
+                if len(surveys.keys())>1:
+                    desurvey = densifySurvey(surveys)    #run desurvey/densify algorithm
+                else:
+                    desurvey = surveys
+                #print "survey", surveys
+                #print "desurvey",desurvey
+                drillholes[holeid] = [collars, desurvey]
+                #print "drillhole %s loaded and desurveyed" % (holeid) 
+    #print drillholes
+    return drillholes
+	
+def densifySurvey(data):
+    #a drillhole desurvey tool using simple smooth interpolation of dip and azimuth 
+    #between survey points. data is a dict {idx:[depth, dip, azi]} where index  starts at 0 and increments
+    d=data
+    i=len(d.keys())-1
+    entry=0
+    newkey=0 # a key variable for creating the new dictionary
+    densurvey = {}
+    #this works as long as the survey dictionary keys are sequential starting from 0
+    while (entry< i):
+        next=entry +1 
+        list=d[entry]
+        list2=d[next] #the next survey in the sequence)
+        dh1 = float(list[0])
+        dh2= float(list2[0])
+        dip1=float(list[1])
+        dip2=float(list2[1])
+        azi1=float(list[2])
+        azi2 = float(list2[2])
+        #print dhl, dip1, dip2, azi1, azi2
+        #print "iteration", entry
+        
+        interpdhlList=np.linspace(dh1, dh2, num =10) #create the extra downhole locations
+        #need some handling of azis moving between 359 and 001
+        if abs(azi1 - azi2) > 300: #detect when azi's are either side of 360
+            if azi1 <180:
+                azi1 = azi1+360   #add 360 to the smaller number to get a continuous number line to interpolate
+            else:
+                azi2 = azi2 +360
+                
+        for item, objects in enumerate(interpdhlList):
+            try:
+                dipInterp =np.interp(float(objects),[dh1,dh2], [dip1,dip2]) #object is the current dhl to calculate for
+                aziInterp =np.interp(float(objects),[dh1,dh2], [azi1,azi2])
+                if aziInterp >360:     #correct for azi's greater than 360
+                    aziInterp = aziInterp-360
+                    
+                interpsurv = [objects, dipInterp, aziInterp]
+                densurvey[newkey]=interpsurv
+                newkey=newkey+1
+                #print interpsurv
+            except IndexError:
+                pass
+        entry = entry +1
+    
+    #this will disturb single survey dictionaries (causing the first key to be 1, so
+    #it is best this function is not run on holes with single survey
+    newkey=newkey+1 
+    #add on final survey entry (from last survey to end of hole) as cant be interpolated
+    
+    densurvey[newkey]=d[entry]
+    return densurvey  
+	
+def calcXYZ(drillholes):
+#calculate XYZ coords for all drillholes
+    for holes in drillholes:
+        holedata = drillholes[holes]
+        collar = holedata[0]
+        survey =holedata[1]
+        trace = DrillholeCoordBuilder(collar, survey)
+        drillholeXYZ[holes] = trace.results
+        #print "drillhole %s built" % (holes)
+    return drillholeXYZ
+    
+def writeTraceLayer(drillXYZ, outfile, plan=True, sectionplane=None, loadcanvas=True): 
+    #create a layer to hold plan drill traces
+    layer = QgsVectorLayer("LineString?field=HoleID:string", "Drill traces", "memory")
+    pr = layer.dataProvider()
+    print outfile
+    writer = QgsVectorFileWriter(outfile, "CP1250", pr.fields(), QGis.WKBLineString, pr.crs(), "ESRI Shapefile")
+    #add features to layer
+
+    for holes in drillXYZ:
+        holedat = drillXYZ[holes]
+        if plan:
+            trace = planGeomBuilder(holedat)
+        else:
+            trace = sectionGeomBuilder(holedat, sectionplane)
+            
+        feat=QgsFeature()
+        try:
+            feat.setGeometry(trace)
+        except TypeError:
+            msg = "Hole %s has invalid geometry" % (holes)
+            print msg
+        feat.setAttributes([0,holes])
+        writer.addFeature(feat)
+        
+    del writer
+      
+    #add layer to map canvas  
+    if loadcanvas:
+        name = os.path.basename(outfile)
+        layer= QgsVectorLayer(outfile, name, "ogr" )
+        QgsMapLayerRegistry.instance().addMapLayer(layer)
+
+def createCollarLayer(drillholes, outfile, loadcanvas=True):
+	#function to create a shapefile of the collar locations
+	templayer = QgsVectorLayer("temp?field=HoleID:string&field=Easting:real&field=Northing:real&field=Elevation:real&field=EOH:real", "Collars", "memory")
+	temprov = templayer.dataProvider()
+	writer = QgsVectorFileWriter(outfile, "CP1250", temprov.fields(), QGis.WKBPoint, temprov.crs(), "ESRI Shapefile")
+	
+	for features in drillholes:
+		collardat = drillholes[features]
+		point = QgsPoint(float(collardat[0][0]), float(collardat[0][1]))
+		feat=QgsFeature()
+		feat.setGeometry(QgsGeometry.fromPoint(point))
+		feat.setAttributes([0, features])
+		feat.setAttributes([1, float(collardat[0][0])])
+		feat.setAttributes([1, float(collardat[0][1])])
+		feat.setAttributes([1, float(collardat[0][2])])
+		feat.setAttributes([1, float(collardat[0][3])])
+		writer.addFeature(feat)
+		
+	del writer
+	
+	if loadcanvas:
+		name = os.path.basename(outfile)
+		layer= QgsVectorLayer(outfile, name, "ogr" )
+		QgsMapLayerRegistry.instance().addMapLayer(layer)
+		
+
+
 
 
 #the execution sequence
 #create empty containers
 drillholes = {}
 drillholeXYZ = {}
+
 #start executing the methods
-drillholes = readFromFile()
+collarsfile= r"E:\GitHub\DrillHandler\Collar.csv"
+surveysfile= r"E:\GitHub\DrillHandler\Survey.csv"
+drillholes = readFromFile(collarsfile, surveysfile)
 drillXYZ=calcXYZ(drillholes)
 #print "drill coordinates", drillXYZ
 
+tracelayer = r"E:\GitHub\DrillHandler\trace.shp"
+outcollar = r"E:\GitHub\DrillHandler\collarfromfile.shp"
+createCollarLayer(drillholes, outcollar)
+writeTraceLayer(drillXYZ, tracelayer)
+
 plane=[0,0,90]
-writeLayer(drillXYZ, plan=False, sectionplane=plane)
+#writeTraceLayer(drillXYZ, plan=False, sectionplane=plane)
 logfilepath = "E:\GitHub\DrillHandler\magsus.csv"
-LogDrawer(drillXYZ, logfilepath, plan=False, sectionplane=plane)
+#LogDrawer(drillXYZ, logfilepath, plan=False, sectionplane=plane)
